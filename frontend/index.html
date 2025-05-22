@@ -1,24 +1,129 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ca">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Project Test</title>
+    <title>Gestor de Tasques</title>
+    <!-- Vue.js Local (instalado por npm) -->
+    <script src="./node_modules/vue/dist/vue.global.js"></script>
+    <!-- Stylesheet -->
     <link rel="stylesheet" href="css/styles.css">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div id="app">
         <header>
-            <h1>Project Test</h1>
+            <h1>Gestor de Tasques</h1>
         </header>
+
         <main>
-            <div id="content"></div>
+            <div class="container">
+                <div class="task-form">
+                    <h2>{{ editMode ? 'Editar Tasca' : 'Nova Tasca' }}</h2>
+                    <form @submit.prevent="saveTask">
+                        <div class="form-group">
+                            <label for="title">Títol</label>
+                            <input type="text" id="title" v-model="currentTask.title" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="description">Descripció</label>
+                            <textarea id="description" v-model="currentTask.description"></textarea>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="status">Estat</label>
+                                <select id="status" v-model="currentTask.status">
+                                    <option value="pending">Pendent</option>
+                                    <option value="in-progress">En progrés</option>
+                                    <option value="completed">Completada</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="priority">Prioritat</label>
+                                <select id="priority" v-model="currentTask.priority">
+                                    <option value="low">Baixa</option>
+                                    <option value="medium">Mitjana</option>
+                                    <option value="high">Alta</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="dueDate">Data límit</label>
+                            <input type="date" id="dueDate" v-model="currentTask.dueDate">
+                        </div>
+                        <div class="form-buttons">
+                            <button type="submit" class="btn primary">{{ editMode ? 'Actualitzar' : 'Crear' }}</button>
+                            <button type="button" class="btn secondary" @click="resetForm">Cancel·lar</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="task-list">
+                    <h2>Llista de Tasques</h2>
+                    <div class="filters">
+                        <button @click="filterTasks('all')" :class="{ active: currentFilter === 'all' }">Totes</button>
+                        <button @click="filterTasks('pending')" :class="{ active: currentFilter === 'pending' }">Pendents</button>
+                        <button @click="filterTasks('in-progress')" :class="{ active: currentFilter === 'in-progress' }">En progrés</button>
+                        <button @click="filterTasks('completed')" :class="{ active: currentFilter === 'completed' }">Completades</button>
+                        <button @click="loadTasks" class="refresh-btn" title="Refrescar tasques"><i class="fas fa-sync"></i></button>
+                    </div>
+                    <div class="task-summary">
+                        <span>Total: <strong>{{ tasks.length }}</strong></span>
+                        <span>Filtrades: <strong>{{ filteredTasks.length }}</strong></span>
+                        <span>Filtre actual: <strong>{{ currentFilter === 'all' ? 'Totes' : 
+                                                      currentFilter === 'pending' ? 'Pendents' :
+                                                      currentFilter === 'in-progress' ? 'En progrés' : 'Completades' }}</strong></span>
+                    </div>
+                    
+                    <div v-if="successMessage" class="success-message">
+                        <i class="fas fa-check-circle"></i> {{ successMessage }}
+                    </div>
+                    <div v-if="error" class="error-message">
+                        <i class="fas fa-exclamation-circle"></i> {{ error }}
+                    </div>
+                    <div v-if="loading" class="loading">
+                        <i class="fas fa-spinner fa-spin"></i> Carregant tasques...
+                    </div>
+                    <div v-else-if="filteredTasks.length === 0" class="no-tasks">
+                        No hi ha tasques {{ currentFilter !== 'all' ? 'amb aquest filtre' : '' }}.
+                        <div v-if="currentFilter !== 'all' && tasks.length > 0" class="filter-suggestion">
+                            Hi ha {{ tasks.length }} tasques en total. <a href="#" @click.prevent="filterTasks('all')">Mostrar totes</a>
+                        </div>
+                    </div>
+                    <ul v-else class="tasks">
+                        <li v-for="task in filteredTasks" :key="task._id" :class="['task-item', task.status, task.isNew ? 'new-task' : '']">
+                            <div class="task-header">
+                                <h3>{{ task.title }} 
+                                    <span v-if="task.isNew" class="new-badge">Nova</span>
+                                    <span v-if="task._id" class="id-badge">ID: {{ task._id.substring(task._id.length - 4) }}</span>
+                                </h3>
+                                <div class="priority-badge" :class="task.priority">{{ getPriorityLabel(task.priority) }}</div>
+                            </div>
+                            <p class="task-description">{{ task.description }}</p>
+                            <div class="task-details">
+                                <span class="status">{{ getStatusLabel(task.status) }}</span>
+                                <span v-if="task.dueDate" class="due-date">
+                                    <i class="fa-regular fa-calendar"></i> {{ formatDate(task.dueDate) }}
+                                </span>
+                            </div>
+                            <div class="task-actions">
+                                <button @click="editTask(task)" class="btn edit" title="Editar tasca"><i class="fas fa-edit"></i></button>
+                                <button @click="completeTask(task._id)" class="btn complete" :disabled="task.status === 'completed'" title="Marcar com completada"><i class="fas fa-check"></i></button>
+                                <button @click="deleteTask(task._id)" class="btn delete" title="Eliminar tasca"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </main>
+
+        <footer>
+            <p>&copy; 2025 Gestor de Tasques - Projecte RA9</p>
+        </footer>
     </div>
 
-    <script src="js/model.js"></script>
-    <script src="js/view.js"></script>
-    <script src="js/viewmodel.js"></script>
-    <script src="js/main.js"></script>
+    <!-- Vue.js App -->
+    <script type="module" src="js/app.js"></script>
 </body>
 </html>

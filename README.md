@@ -11,7 +11,7 @@ projecte-final/
         routes/ (api.js)
         controllers/ (controller.js)
         config/ (db.js)
-        app.js (servidor Express)
+        server.js (servidor Express)
         package.json (gestió de dependències)
     frontend/
         css/ (styles.css)
